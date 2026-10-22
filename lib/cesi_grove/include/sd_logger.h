@@ -3,28 +3,19 @@
 
 #include <stdbool.h>
 
-typedef enum
-{
-	SDLOGGER_CARD_UNKNOWN = 0,
-	SDLOGGER_CARD_SDSC,
-	SDLOGGER_CARD_SDHC
-} SDLoggerCardType;
+/*
+ * Ecriture de lignes de texte dans des fichiers de la carte SD, en FAT32 (FatFs).
+ * Les fichiers se lisent ensuite normalement sur un PC.
+ * Le pilote SPI de la carte est dans sd_diskio.c.
+ */
 
-typedef enum
-{
-	SDLOGGER_INIT_OK = 0,
-	SDLOGGER_INIT_ERR_CMD0,
-	SDLOGGER_INIT_ERR_CMD8_PATTERN,
-	SDLOGGER_INIT_ERR_ACMD41_TIMEOUT,
-	SDLOGGER_INIT_ERR_CMD58,
-	SDLOGGER_INIT_ERR_CMD1_TIMEOUT
-} SDLoggerInitStatus;
-
+/* Monte la carte (FAT32). Renvoie true si la carte est prete. */
 bool SDLogger_Init(void);
-SDLoggerCardType SDLogger_GetCardType(void);
-SDLoggerInitStatus SDLogger_GetLastInitStatus(void);
-const char *SDLogger_GetActiveCsLabel(void);
-bool SDLogger_BitBangCMD0Test(void);
+
+/* Dernier code FatFs : 0 = OK, 3 = carte absente ou muette, 13 = carte pas en FAT32 */
+int SDLogger_GetLastInitStatus(void);
+
+/* Ajoute la ligne a la fin du fichier (cree le fichier s'il n'existe pas) */
 bool SDLogger_WriteLine(const char *filename, const char *line);
 
 #endif

@@ -25,11 +25,10 @@ void GroveGPS_Init(void)
     /*
      * Port Grove A0 : Signal1=PA0=GPS_TX, Signal2=PA1=GPS_RX.
      * Le module Air530Z émet sur Signal1 (PA0).
-     * Pin swap UART4 activé : PA0=UART4_RX, PA1=UART4_TX.
-     * L'init GPIO est centralisée dans HAL_UART_MspInit (setup.c).
+     * Pin swap UART4 activé (ENABLE) pour rediriger correctement le flux sur PA0/PA1.
      */
     GPS_UART_HANDLE.Instance = UART4;
-    GPS_UART_HANDLE.Init.BaudRate = 9600;
+    GPS_UART_HANDLE.Init.BaudRate = 9600; // Ou 115200 selon votre module d'origine
     GPS_UART_HANDLE.Init.WordLength = UART_WORDLENGTH_8B;
     GPS_UART_HANDLE.Init.StopBits = UART_STOPBITS_1;
     GPS_UART_HANDLE.Init.Parity = UART_PARITY_NONE;
@@ -38,7 +37,7 @@ void GroveGPS_Init(void)
     GPS_UART_HANDLE.Init.OverSampling = UART_OVERSAMPLING_16;
     GPS_UART_HANDLE.Init.OneBitSampling = UART_ONE_BIT_SAMPLE_DISABLE;
     GPS_UART_HANDLE.AdvancedInit.AdvFeatureInit = UART_ADVFEATURE_SWAP_INIT;
-    GPS_UART_HANDLE.AdvancedInit.Swap = UART_ADVFEATURE_SWAP_DISABLE;
+    GPS_UART_HANDLE.AdvancedInit.Swap = UART_ADVFEATURE_SWAP_ENABLE; // Correction Bug n°1
 
     HAL_UART_Init(&GPS_UART_HANDLE);
 }
@@ -91,8 +90,8 @@ bool GroveGPS_ReadGGA(GPS_Data *gps, unsigned int timeout_ms)
         gps->raw_sentence[sizeof(gps->raw_sentence) - 1] = '\0';
 
         /*
-         * Format GGA :
-         * $GPGGA,time,lat,N,lon,E,fix,sats,hdop,alt,M,...
+         * Correction Bug n°2 : Découpage manuel des champs GGA 
+         * pour préserver les virgules consécutives (champs vides sans fix).
          */
         char copy[96];
         strncpy(copy, line, sizeof(copy));
@@ -100,15 +99,19 @@ bool GroveGPS_ReadGGA(GPS_Data *gps, unsigned int timeout_ms)
 
         char *fields[16] = {0};
         int i = 0;
-        char *token = strtok(copy, ",");
-
-        while (token != 0 && i < 16)
+        char *p = copy;
+        fields[i++] = p;
+        while (*p && i < 16)
         {
-            fields[i++] = token;
-            token = strtok(0, ",");
+            if (*p == ',')
+            {
+                *p = '\0';
+                fields[i++] = p + 1;
+            }
+            p++;
         }
 
-        if (i < 8) return false;
+        if (i < 8) continue; // Ne bloque pas si la trame est incomplète, passe à la suivante
 
         gps->latitude = nmea_to_decimal(fields[2], fields[3] ? fields[3][0] : 'N');
         gps->longitude = nmea_to_decimal(fields[4], fields[5] ? fields[5][0] : 'E');
