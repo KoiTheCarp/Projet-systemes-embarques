@@ -41,9 +41,6 @@ static uint32_t btn_green_press_start = 0;
 static bool btn_red_timer_active = false;
 static bool btn_green_timer_active = false;
 
-// Paramètres configurables (intervalle de log par défaut à 10 secondes pour les tests)
-static uint32_t log_interval_ms = 10000; 
-
 // Application de la couleur de la LED selon le mode
 static void Update_System_LED(SystemMode_t mode) {
     switch (mode) {
@@ -154,6 +151,8 @@ int main(void) {
             
             case MODE_STANDARD:
             case MODE_ECONOMIC: {
+                // Intervalle réglé par la commande LOG_INTERVALL (doublé en mode éco)
+                uint32_t log_interval_ms = obtenirLogIntervalMs();
                 uint32_t active_interval = (current_mode == MODE_ECONOMIC) ? (log_interval_ms * 2) : log_interval_ms;
 
                 if ((current_tick - last_log_tick) >= active_interval) {
