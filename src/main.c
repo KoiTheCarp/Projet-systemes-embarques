@@ -6,6 +6,7 @@
 #include "cesi_types.h"
 #include "setup.h"
 #include "board_pins.h"
+#include "configuration.h"
 
 // Inclusions des pilotes matériels
 #include "bme280.h"
@@ -14,7 +15,7 @@
 #include "grove_light.h"
 #include "grove_rgb.h"
 #include "grove_rtc_ds1307.h"
-#include "sd_logger.h" // Pilote de la carte SD
+#include "sd_logger.h"
 
 // Déclaration du gestionnaire UART du ST-Link (USART2 sur les Nucleo)
 extern UART_HandleTypeDef huart2;
@@ -40,8 +41,8 @@ static uint32_t btn_green_press_start = 0;
 static bool btn_red_timer_active = false;
 static bool btn_green_timer_active = false;
 
-// Paramètres configurables (intervalle de log par défaut à 10 minutes, ajustable pour les tests)
-static uint32_t log_interval_ms = 10000; // 10 secondes pour les tests (mettre 600000 pour 10 min)
+// Paramètres configurables (intervalle de log par défaut à 10 secondes pour les tests)
+static uint32_t log_interval_ms = 10000; 
 
 // Application de la couleur de la LED selon le mode
 static void Update_System_LED(SystemMode_t mode) {
@@ -67,7 +68,7 @@ int main(void) {
     
     setvbuf(stdout, NULL, _IONBF, 0);
 
-    // Délai de courtoisie pour laisser le moniteur série de VS Code s'ouvrir
+    // Délai de courtoisie pour laisser le moniteur série s'ouvrir
     HAL_Delay(2000);
 
     // Initialisation des modules Grove
@@ -88,6 +89,9 @@ int main(void) {
     BME280_Handle bme;
     bool bme_ok = BME280_Init(&bme, &hi2c1);
 
+    // Initialisation du module de configuration
+    initialiserConfiguration();
+
     // 3. Choix du mode au démarrage (Bouton 2 pressé = Mode configuration)
     if (GroveButton2_IsPressed()) {
         current_mode = MODE_CONFIGURATION;
@@ -99,7 +103,6 @@ int main(void) {
     printf("\r\n=== STATION METEO DEMARREE - Mode actuel : %d ===\r\n", current_mode);
 
     uint32_t last_log_tick = HAL_GetTick();
-    uint32_t config_start_tick = HAL_GetTick();
 
     while (1) {
         uint32_t current_tick = HAL_GetTick();
@@ -163,11 +166,11 @@ int main(void) {
                     // 2. Lecture Luminosité
                     uint16_t light = GroveLight_ReadRaw();
 
-                    // 3. Lecture BME280 (avec gestion du statut NA)
+                    // 3. Lecture BME280
                     BME280_Data env;
                     bool read_success = bme_ok && BME280_Read(&bme, &env);
 
-                    // 4. Lecture GPS Air530Z (Timeout de 3000 ms)
+                    // 4. Lecture GPS Air530Z
                     GPS_Data gps_info;
                     bool gps_ok = GroveGPS_ReadGGA(&gps_info, 3000);
 
@@ -177,7 +180,6 @@ int main(void) {
                     char log_line[256];
                     char filename[32];
 
-                    // Nom du fichier au format YYMMDD_0.LOG (ex: 261021_0.LOG)
                     snprintf(filename, sizeof(filename), "%02u%02u%02u_0.LOG", 
                              dt.year % 100, dt.month, dt.day);
 
@@ -195,15 +197,12 @@ int main(void) {
                         snprintf(gps_str, sizeof(gps_str), "GPS:NA");
                     }
 
-                    // Ligne unique horodatée regroupant toutes les mesures
                     snprintf(log_line, sizeof(log_line), "[%02u/%02u/%04u %02u:%02u:%02u] Mode:%d | Light:%u | %s | %s\r\n",
                              dt.day, dt.month, dt.year, dt.hours, dt.minutes, dt.seconds,
                              current_mode, light, bme_str, gps_str);
 
-                    // Affichage console en direct
                     printf("%s", log_line);
 
-                    // --- ENREGISTREMENT SUR LA CARTE SD ---
                     if (SDLogger_WriteLine(filename, log_line)) {
                         printf("[SD] Ecriture reussie dans %s\r\n", filename);
                     } else {
@@ -214,12 +213,14 @@ int main(void) {
             }
 
             case MODE_CONFIGURATION: {
-                if ((current_tick - config_start_tick) > (30UL * 60UL * 1000UL)) {
+                // Gestion de la configuration et des commandes série via configuration.c
+                gererModeConfiguration();
+
+                // Vérification du timeout de 30 minutes
+                if (verifierTimeoutConfiguration()) {
                     current_mode = MODE_STANDARD;
                     Update_System_LED(current_mode);
-                    printf("[MODE] Inactivite 30 min -> Bascule automatique en mode Standard\r\n");
                 }
-                HAL_Delay(100);
                 break;
             }
 
